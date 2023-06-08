@@ -1,4 +1,6 @@
-import {Player, World} from "@early_access_api/v1";
+import {Component, Entity, HorizonEvent, Player, World} from "@early_access_api/v1";
+
+export const HighScoreUpdateEvent = new HorizonEvent<{player: Player}>("highScoreUpdate")
 
 export type PointsManagerOptions = {
     winPoints: number,
@@ -19,9 +21,6 @@ export const PointsManagerDefaults: PointsManagerOptions = {
 }
 
 export class PointsManager {
-    private static readonly POINTS_PPV = "points";
-    private static readonly LEADERBOARD = "scores";
-
     private readonly winPoints: number
     private readonly losePoints: number
     private readonly maxWin: number
@@ -29,12 +28,15 @@ export class PointsManager {
     private readonly streakThreshold: number
     private readonly streakMultiplier: number
 
-    // XXX possibly could cache points here rather than fetching from PPV each time?
-    // private points = 0;
+    private points = 0;
     private streakLength = 0;
     private pointFactor = 1;
 
-    constructor(private readonly player: Player, private readonly world: World, options: Partial<PointsManagerOptions> = {}) {
+    constructor(private readonly player: Player,
+                private readonly game: Component,
+                private readonly highScorePpv: string,
+                private readonly leaderboard: string,
+                options: Partial<PointsManagerOptions> = {}) {
         const opts = {...PointsManagerDefaults, ...options};
         this.winPoints = opts.winPoints;
         this.losePoints = opts.losePoints;
@@ -45,41 +47,44 @@ export class PointsManager {
     }
 
     win() {
-        let points = this.world.persistentStorage.getPlayerVariable(this.player, PointsManager.POINTS_PPV);
-        points += this.winPoints * this.pointFactor;
-        if (points > this.maxWin) {
-            points = this.maxWin;
+        this.points += this.winPoints * this.pointFactor;
+        if (this.points > this.maxWin) {
+            this.points = this.maxWin;
         }
         // XXX does streak start _after_ reaching the threshold, or when reaching threshold? Choosing after.
         this.streakLength++;
         if (this.streakLength >= this.streakThreshold) {
             this.pointFactor = this.streakMultiplier;
         }
-        this.recordScore(points);
-        return points
+        this.recordScore();
+        return this.points;
     }
 
     lose() {
-        let points = this.world.persistentStorage.getPlayerVariable(this.player, PointsManager.POINTS_PPV);
-        points -= this.losePoints;
-        if (points < this.maxLose) {
-            points = this.maxLose;
+        this.points -= this.losePoints;
+        if (this.points < this.maxLose) {
+            this.points = this.maxLose;
         }
         this.streakLength = 0;
         this.pointFactor = 1;
-        this.recordScore(points);
-        return points;
+        this.recordScore();
+        return this.points;
     }
 
-    reset() {
+    reset(resetHighScore: boolean) {
+        this.points = 0;
         this.streakLength = 0;
         this.pointFactor = 1;
-        this.recordScore(0);
-        return 0;
+        this.recordScore(resetHighScore);
+        return this.points;
     }
 
-    private recordScore(points: number) {
-        this.world.persistentStorage.setPlayerVariable(this.player, PointsManager.POINTS_PPV, points);
-        this.world.leaderboards.setScoreForPlayer(PointsManager.LEADERBOARD, this.player, points, true)
+    private recordScore(resetHighScore: boolean = false) {
+        const highScore = this.game.world.persistentStorage.getPlayerVariable(this.player, this.highScorePpv);
+        if (resetHighScore || this.points > highScore) {
+            this.game.world.persistentStorage.setPlayerVariable(this.player, this.highScorePpv, this.points);
+            this.game.sendBroadcastEvent(HighScoreUpdateEvent, {player: this.player});
+        }
+        this.game.world.leaderboards.setScoreForPlayer(this.leaderboard, this.player, this.points, resetHighScore);
     }
 }

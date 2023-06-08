@@ -12,8 +12,11 @@ type PointsDemoProps = {
     winButton: Entity,
     loseButton: Entity,
     resetButton: Entity,
+    resetHighScoreButton: Entity,
     playerTxt: Entity,
     scoreTxt: Entity,
+    ppv: string,
+    leaderboard: string,
 }
 
 class PointsDemo extends Component<PointsDemoProps> {
@@ -21,8 +24,11 @@ class PointsDemo extends Component<PointsDemoProps> {
         winButton: {type: PropTypes.Entity},
         loseButton: {type: PropTypes.Entity},
         resetButton: {type: PropTypes.Entity},
+        resetHighScoreButton: {type: PropTypes.Entity},
         playerTxt: {type: PropTypes.Entity},
         scoreTxt: {type: PropTypes.Entity},
+        ppv: {type: PropTypes.String},
+        leaderboard: {type: PropTypes.String},
     }
 
     private static demoManagerOptions: Partial<PointsManagerOptions> = {
@@ -38,9 +44,11 @@ class PointsDemo extends Component<PointsDemoProps> {
         this.props.winButton.as(PhysicalEntity).locked.set(true);
         this.props.loseButton.as(PhysicalEntity).locked.set(true);
         this.props.resetButton.as(PhysicalEntity).locked.set(true);
+        this.props.resetHighScoreButton.as(PhysicalEntity).locked.set(true);
         this.connectCodeBlockEvent(this.props.winButton, CodeBlockEvents.OnGrabStart, this.win.bind(this));
         this.connectCodeBlockEvent(this.props.loseButton, CodeBlockEvents.OnGrabStart, this.lose.bind(this));
         this.connectCodeBlockEvent(this.props.resetButton, CodeBlockEvents.OnGrabStart, this.reset.bind(this));
+        this.connectCodeBlockEvent(this.props.resetHighScoreButton, CodeBlockEvents.OnGrabStart, this.resetHighScore.bind(this));
         this.connectCodeBlockEvent(this.entity, CodeBlockEvents.OnPlayerExitWorld, this.playerExit.bind(this));
     }
 
@@ -59,8 +67,14 @@ class PointsDemo extends Component<PointsDemoProps> {
     reset(isRightHand: boolean, player: Player) {
         this.props.resetButton.as(GrabbableEntity).forceRelease();
         const pointsManager = this.getPlayerPointsManager(player);
-        this.displayScore(player, pointsManager.reset());
+        this.displayScore(player, pointsManager.reset(false));
 
+    }
+
+    resetHighScore(isRightHand: boolean, player: Player) {
+        this.props.resetButton.as(GrabbableEntity).forceRelease();
+        const pointsManager = this.getPlayerPointsManager(player);
+        this.displayScore(player, pointsManager.reset(true));
     }
 
     playerExit(player: Player) {
@@ -70,7 +84,10 @@ class PointsDemo extends Component<PointsDemoProps> {
     private getPlayerPointsManager(player: Player) {
         let pointsManager = this.playerPointsManagers.get(player);
         if (!pointsManager) {
-            pointsManager = new PointsManager(player, this.world, PointsDemo.demoManagerOptions);
+            pointsManager = new PointsManager(
+                player, this,
+                this.props.ppv, this.props.leaderboard,
+                PointsDemo.demoManagerOptions);
             this.playerPointsManagers.set(player, pointsManager);
         }
         return pointsManager;
